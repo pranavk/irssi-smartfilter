@@ -25,6 +25,11 @@ our $lastmsg = {};
 #   or QUIT, a second nick change, etc.
 sub checkactive {
 	my ($nick, $altnick) = @_;
+	my $whitelist_nicks = Irssi::settings_get_str('smartfilter_whitelist_nicks');
+	my @whitelist_nicks_array = split /\s+/, $whitelist_nicks;
+	if (grep {$_ eq $nick} @whitelist_nicks_array) {
+		return;
+	}
 	if ($lastmsg->{$nick} <= time() - Irssi::settings_get_int('smartfilter_delay')) {
 		Irssi::signal_stop();
 	} else {
@@ -59,6 +64,40 @@ sub log {
 	$lastmsg->{$nick} = time();
 }
 
+sub sf_nick_add {
+	my ($args, $server, $witem) = @_;
+	my $str = '';
+	my @old_nicks = ( );
+	my @new_nicks = ( );
+	my @final = ( );
+
+	my ($type, $rest) = split /\s+/, $args, 2;
+	my $whitelist_nicks = Irssi::settings_get_str('smartfilter_whitelist_nicks');
+	@old_list = split /\s+/, @whitelist_nicks;
+	@new_nicks = split /\s+/, $rest;
+	@final = (@old_nicks, @new_nicks);
+
+	$str = join(' ', @final);
+	Irssi::settings_set_str('smartfilter_whitelist_nicks', $str);	
+}
+
+sub sf_nick_remove {
+	my ($args, $server, $witem) = @_;
+	my $str = '';
+	my @new_nicks = ( );
+	my @old_nicks = ( );
+	my @final = ( );
+	
+	my ($type, $rest) = split /\s+/, @args, 2;
+	my $whitelist_nicks = Irssi::settings_get_str('smartfilter_whitelist_nicks');
+	@old_nicks = split /\s+/, $whitelist_nicks;		
+	@new_nicks = split /\s+/, $rest;
+	my @final = grep{not $_ ~~ @new_nicks} @old_nicks;
+	$str = join(' ', @final);
+	Irssi::settings_set_str('smartfilter_whitelist_nicks', $str);
+}
+
+
 Irssi::signal_add('message public', 'log');
 Irssi::signal_add('message join', 'smartfilter_chan');
 Irssi::signal_add('message part', 'smartfilter_chan');
@@ -66,3 +105,13 @@ Irssi::signal_add('message quit', 'smartfilter_quit');
 Irssi::signal_add('message nick', 'smartfilter_nick');
 
 Irssi::settings_add_int('smartfilter', 'smartfilter_delay', 900);
+Irssi::settings_add_str('smartfilter', 'smartfilter_whitelist_nicks', '');
+
+Irssi::command_bind 'sm' => sub {
+	my ( $data, $server, $item ) = @_;
+	$data =~ s/\s+$//g;
+	Irssi::command_runsub ('sm', $data, $server, $item );
+}
+
+Irssi::command_bind('sf add nick', \&sf_nick_add);
+Irssi::command_bind('sf remove nick', \&sf_nick_remove);
